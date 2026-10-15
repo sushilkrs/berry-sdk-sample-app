@@ -3,54 +3,30 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Resume KG Playground</title>
+<title>BerryDB SDK Sample App</title>
 <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
 <header class="topbar">
-  <div class="brand">
-    <span class="logo">R</span>
+  <a class="brand" href="#/">
+    <span class="logo">B</span>
     <div>
-      <h1>Resume KG Playground</h1>
-      <p>Resumes go to BerryDB for extraction and entity recognition</p>
+      <h1>BerryDB SDK Sample App</h1>
+      <p>Students upload documents · BerryDB extracts them · one profile per student</p>
     </div>
-  </div>
+  </a>
   <div class="sources">
     <span>Data from:</span>
-    <span class="src app" title="This app's own database: SQLite file data/app.db, table files">App DB (SQLite)</span>
-    <span class="src berry" title="Hosted BerryDB, read live through the SDK">BerryDB</span>
+    <span class="src app" title="This app's own database: SQLite file data/app.db (tables students, documents)">App DB</span>
+    <span class="src berry" title="BerryDB database ResumePlaygroundKG: one record per uploaded PDF">BerryDB · documents</span>
+    <span class="src prof" title="BerryDB database StudentProfiles: one record per student, id = student UUID">BerryDB · profiles</span>
     <div id="conn" class="conn"><span class="dot"></span><span>Checking BerryDB…</span></div>
   </div>
 </header>
 
-<div class="layout">
-  <aside class="sidebar">
-    <label id="drop" class="drop">
-      <input id="picker" type="file" accept="application/pdf,.pdf" multiple hidden>
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0-4 4m4-4 4 4M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
-      <strong>Upload resumes</strong>
-      <span>Drop PDFs here or click to browse · max 50 MB</span>
-    </label>
-    <div id="uploads"></div>
-
-    <div class="list-head">
-      <input id="search" type="search" placeholder="Search name, title, location, file…">
-      <div id="counts" class="counts"></div>
-    </div>
-    <ul id="list" class="list"></ul>
-  </aside>
-
-  <main id="main" class="main">
-    <div class="empty">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Zm7 0v5h5M9 13h6M9 17h6"/></svg>
-      <h2>Select a resume</h2>
-      <p>Upload a PDF on the left. The app saves it locally, records it in its own database, and sends it to
-        BerryDB, which extracts a structured profile. You can then run entity recognition in BerryDB.</p>
-    </div>
-  </main>
-</div>
+<main id="view"></main>
 
 <div id="toasts" class="toasts" aria-live="polite"></div>
-<script src="js/app.js"></script>
+<script type="module" src="js/app.js"></script>
 </body>
 </html>

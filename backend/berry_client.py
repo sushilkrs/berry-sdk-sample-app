@@ -1,6 +1,12 @@
 """Everything this app asks of BerryDB.
 
-The SDK is used for all of it except sending the file: SDK 1.7.7's Database.ingest_structured
+Two Berry databases:
+  documents (config.BERRY_DATABASE)          one record per uploaded PDF, written by structured ingest;
+                                             Berry derives the record id from the file bytes
+  profiles  (config.BERRY_PROFILE_DATABASE)  one merged record per student, written by this app with
+                                             upsert; the record id is the student's UUID
+
+The SDK is used for everything except sending the file: SDK 1.7.7's Database.ingest_structured
 takes only URLs, while the same endpoint also accepts the file itself as a multipart upload.
 """
 import json
@@ -15,32 +21,40 @@ from . import config
 INGEST_URL = "/berrydb/ingest/structured"
 TEXT_FIELD = "content.text"  # where structured ingest stores the full text (declared in ResumeSchema)
 
-_db = None
+_dbs: dict[str, object] = {}
 
 
 class BerryError(RuntimeError):
     pass
 
 
-def database():
-    global _db
-    if _db is None:
+def _connect(name: str):
+    if name not in _dbs:
         BerryDB.init(config.BERRYDB_HOST)
-        _db = BerryDB.connect(config.BERRYDB_API_KEY, config.BERRY_DATABASE)
-        if _db is None:
-            raise BerryError(f"Database {config.BERRY_DATABASE} not found: run scripts/setup_berry.py")
-    return _db
+        db = BerryDB.connect(config.BERRYDB_API_KEY, name)
+        if db is None:
+            raise BerryError(f"Database {name} not found: run backend.berry_setup.create_schema_and_database")
+        _dbs[name] = db
+    return _dbs[name]
 
 
-def ingest_file(path: Path, file_name: str, app_file_id: str) -> dict:
+def database():
+    return _connect(config.BERRY_DATABASE)
+
+
+def profiles():
+    return _connect(config.BERRY_PROFILE_DATABASE)
+
+
+def ingest_file(path: Path, file_name: str, student_id: str, document_id: str) -> dict:
     """POST the PDF itself; Berry writes one ResumeSchema record and returns its id."""
     with path.open("rb") as fh:
         resp = requests.post(
             config.BERRYDB_HOST + INGEST_URL,
             headers={"x-api-key": config.BERRYDB_API_KEY},
             data={"database_name": config.BERRY_DATABASE,
-                  # written onto the record, so it can be traced back to this app's row
-                  "metadata": json.dumps({"appFileId": app_file_id})},
+                  # written onto the record: whose document it is, and which of our rows it came from
+                  "metadata": json.dumps({"studentId": student_id, "documentId": document_id})},
             files={"file": (file_name, fh, "application/pdf")},
             timeout=300,
         )
@@ -57,6 +71,14 @@ def ingest_file(path: Path, file_name: str, app_file_id: str) -> dict:
 def get_record(record_id: str) -> dict | None:
     docs = database().get_all_documents(document_ids=[record_id]) or []
     return docs[0] if docs else None
+
+
+def get_records(record_ids: list[str]) -> dict[str, dict]:
+    """Several document records in one call, keyed by id. Missing ids are simply absent."""
+    if not record_ids:
+        return {}
+    docs = database().get_all_documents(document_ids=sorted(set(record_ids))) or []
+    return {d["id"]: d for d in docs if d.get("id")}
 
 
 def get_record_retrying(record_id: str, attempts: int = 4) -> dict | None:
@@ -101,6 +123,23 @@ def run_ner(record_id: str):
 
 def delete_record(record_id: str):
     return database().delete_document(record_id)
+
+
+# ---------- student profiles ----------
+
+def upsert_profile(record: dict) -> None:
+    """Create the student's profile if its id is new, replace it if it exists. Upsert replaces the whole
+    record, so `record` must always be complete."""
+    profiles().upsert([record])
+
+
+def get_profile(student_id: str) -> dict | None:
+    docs = profiles().get_all_documents(document_ids=[student_id]) or []
+    return docs[0] if docs else None
+
+
+def delete_profile(student_id: str):
+    return profiles().delete_document(student_id)
 
 
 def reachable() -> bool:

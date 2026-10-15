@@ -1,5 +1,5 @@
-"""Resume KG playground API: upload resumes, keep them locally, let BerryDB extract them.
-Also serves the frontend/ folder.
+"""BerryDB SDK sample app API: students upload documents; BerryDB extracts each one; the app keeps one
+merged profile per student in BerryDB. Also serves the frontend/ folder.
 
     .venv/Scripts/python -m backend
 """
@@ -9,16 +9,17 @@ import shutil
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Body, FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import app_db, berry_client, config
+from . import app_db, berry_client, config, profile_merge
 
-app = FastAPI(title="Resume KG playground")
+app = FastAPI(title="BerryDB SDK sample app")
 _pool = ThreadPoolExecutor(max_workers=3)
 
 MAX_BYTES = 50 * 1024 * 1024  # the ingest endpoint's own limit
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 PROFILE_FIELDS = ["fullName", "jobTitle", "location", "email", "linkedInUrl", "githubUrl", "portfolioUrl",
                   "professionalSummary", "skillsList", "workExperience", "degreeName", "institutionName",
                   "graduationYear", "academicUnits", "documentUrl"]
@@ -28,103 +29,200 @@ def _safe_name(name: str) -> str:
     return re.sub(r"[^\w.\- ]", "_", name or "file.pdf")[:150] or "file.pdf"
 
 
-def _file_or_404(file_id: str) -> dict:
-    row = app_db.get(file_id)
+def _student_or_404(student_id: str) -> dict:
+    row = app_db.get_student(student_id)
     if not row:
-        raise HTTPException(404, "File not found")
+        raise HTTPException(404, "Student not found")
     return row
 
 
-def _copy_display_fields(file_id: str, record: dict) -> None:
-    """Keep the name, title and location on the app's row so the list needs no Berry call."""
-    app_db.update(file_id, candidate_name=record.get("fullName") or None, job_title=record.get("jobTitle") or None,
-                  location=record.get("location") or None)
-
-
-def _send(file_id: str) -> None:
-    """Send one stored file to Berry and record the outcome on its row."""
-    row = app_db.get(file_id)
+def _document_or_404(document_id: str) -> dict:
+    row = app_db.get_document(document_id)
     if not row:
-        return
-    app_db.update(file_id, status="sending", error=None)
+        raise HTTPException(404, "Document not found")
+    return row
+
+
+def _student_dir(student_id: str):
+    return config.STORAGE / "students" / student_id
+
+
+# ---------- student profile in Berry ----------
+
+def sync_profile(student_id: str, fresh: dict[str, dict] | None = None) -> dict | None:
+    """Rebuild the student's merged profile from all their documents and upsert it with id = student UUID:
+    Berry creates the record the first time and replaces it afterwards. `fresh` holds records just
+    written, which Berry may not return from a read yet."""
+    student = app_db.get_student(student_id)
+    if not student:
+        return None
+    docs = app_db.documents_of(student_id)
     try:
-        res = berry_client.ingest_file(config.ROOT / row["file_path"], row["file_name"], file_id)
+        records = berry_client.get_records([d["berry_record_id"] for d in docs
+                                            if d["status"] == "ingested" and d["berry_record_id"]])
+        records.update(fresh or {})
+        profile = profile_merge.build_profile(student, docs, records)
+        berry_client.upsert_profile(profile)
+    except Exception as e:  # the app's own data is intact; the profile can be synced again
+        app_db.update_student(student_id, profile_error=str(e)[:1000])
+        return None
+    app_db.update_student(student_id, profile_synced_at=app_db.now(), profile_error=None)
+    return profile
+
+
+# ---------- sending a document to Berry ----------
+
+def _send(document_id: str) -> None:
+    """Send one stored document to Berry, record the outcome, then update the student's profile."""
+    doc = app_db.get_document(document_id)
+    if not doc:
+        return
+    app_db.update_document(document_id, status="sending", error=None)
+    try:
+        res = berry_client.ingest_file(config.ROOT / doc["file_path"], doc["file_name"], doc["student_id"], document_id)
     except Exception as e:  # the file stays stored; it can be sent again
-        app_db.update(file_id, status="failed", error=str(e)[:1000])
+        app_db.update_document(document_id, status="failed", error=str(e)[:1000])
         return
-    app_db.update(file_id, status="ingested", berry_database=config.BERRY_DATABASE, berry_record_id=res["id"],
-                  fields_filled=res.get("fields_filled"), pages=res.get("pages"), text_field=res.get("text_field"),
-                  ingested_at=app_db.now(), error=None)
+    # re-ingesting replaces the Berry record, annotations included
+    app_db.update_document(document_id, status="ingested", berry_record_id=res["id"],
+                           fields_filled=res.get("fields_filled"), pages=res.get("pages"),
+                           text_field=res.get("text_field"), ingested_at=app_db.now(), error=None,
+                           ner_status=None, entity_count=None, ner_error=None)
+    fresh = {}
     try:
-        record = berry_client.get_record_retrying(res["id"])
-        if record:
-            _copy_display_fields(file_id, record)
-    except Exception:  # display fields are filled on the next detail view instead
+        rec = berry_client.get_record_retrying(res["id"])
+        if rec:
+            fresh[res["id"]] = rec
+    except Exception:
         pass
+    sync_profile(doc["student_id"], fresh)
 
 
-@app.post("/api/files")
-async def upload(files: list[UploadFile] = File(...)):
+def _delete_berry_record_if_unused(doc: dict) -> None:
+    """Identical files from different students share one Berry record; keep it while anyone uses it."""
+    if doc["berry_record_id"] and not app_db.sharing(doc["berry_record_id"], doc["id"]):
+        berry_client.delete_record(doc["berry_record_id"])
+
+
+# ---------- students ----------
+
+@app.get("/api/students")
+def list_students():
+    return app_db.all_students()
+
+
+@app.post("/api/students")
+def create_student(body: dict = Body(...)):
+    name = " ".join(str(body.get("full_name") or "").split())
+    email = str(body.get("email") or "").strip()
+    if not name:
+        raise HTTPException(400, "Name is required")
+    if email and not EMAIL_RE.match(email):
+        raise HTTPException(400, "That email address does not look valid")
+    student_id = str(uuid.uuid4())  # permanent identity, generated by the app, never derived from documents
+    app_db.insert_student({"id": student_id, "full_name": name, "email": email or None, "created_at": app_db.now()})
+    sync_profile(student_id)  # creates the student's Berry profile (registration details only)
+    return app_db.get_student(student_id)
+
+
+@app.get("/api/students/{student_id}")
+def student_detail(student_id: str):
+    student = _student_or_404(student_id)
+    docs = app_db.documents_of(student_id)
+    for d in docs:
+        d["shared_with"] = app_db.sharing(d["berry_record_id"], d["id"]) if d["berry_record_id"] else []
+    profile, berry_error = None, None
+    try:
+        profile = berry_client.get_profile(student_id)
+        if not profile and student["profile_synced_at"]:
+            berry_error = "BerryDB has not made the latest profile readable yet; refresh in a few seconds."
+    except Exception as e:
+        berry_error = f"Could not read the profile from BerryDB: {str(e)[:300]}"
+    return {"student": student, "documents": docs, "profile": profile, "berry_error": berry_error}
+
+
+@app.post("/api/students/{student_id}/profile/sync")
+def resync(student_id: str):
+    _student_or_404(student_id)
+    if not sync_profile(student_id):
+        raise HTTPException(502, f"Profile sync failed: {app_db.get_student(student_id)['profile_error']}")
+    return {"ok": True}
+
+
+@app.delete("/api/students/{student_id}")
+def delete_student(student_id: str):
+    _student_or_404(student_id)
+    try:
+        for doc in app_db.documents_of(student_id):
+            _delete_berry_record_if_unused(doc)
+            app_db.delete_document(doc["id"])  # so the next one's sharing check no longer counts it
+        berry_client.delete_profile(student_id)
+    except Exception as e:
+        raise HTTPException(502, f"BerryDB delete failed; the student was kept: {e}")
+    shutil.rmtree(_student_dir(student_id), ignore_errors=True)
+    app_db.delete_student(student_id)
+    return {"ok": True}
+
+
+# ---------- documents ----------
+
+@app.post("/api/students/{student_id}/documents")
+async def upload(student_id: str, files: list[UploadFile] = File(...)):
+    _student_or_404(student_id)
     results = []
     for f in files:
         name = _safe_name(f.filename)
         data = await f.read()
         if not name.lower().endswith(".pdf") or not data.startswith(b"%PDF"):
-            results.append({"file_name": name, "error": "Only PDF files can be sent to Berry"})
+            results.append({"file_name": name, "error": "Only PDF files can be sent to BerryDB"})
             continue
         if len(data) > MAX_BYTES:
             results.append({"file_name": name, "error": "File is over 50 MB"})
             continue
         digest = hashlib.sha256(data).hexdigest()
-        dup = app_db.by_hash(digest)
+        dup = app_db.find_duplicate(student_id, digest)
         if dup:
-            results.append({"file_name": name, "error": f"Already uploaded as {dup['file_name']}", "id": dup["id"]})
+            results.append({"file_name": name, "error": f"This student already uploaded this file ({dup['file_name']})",
+                            "id": dup["id"]})
             continue
-        file_id = str(uuid.uuid4())
-        target = config.STORAGE / file_id / name
+        document_id = str(uuid.uuid4())
+        rel = f"storage/students/{student_id}/documents/{document_id}/{name}"
+        target = config.ROOT / rel
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(data)
-        app_db.insert({"id": file_id, "file_name": name, "file_type": f.content_type or "application/pdf",
-                       "file_size": len(data), "sha256": digest, "file_path": f"storage/{file_id}/{name}",
-                       "uploaded_at": app_db.now(), "status": "stored"})
-        _pool.submit(_send, file_id)
-        results.append({"file_name": name, "id": file_id})
+        app_db.insert_document({"id": document_id, "student_id": student_id, "file_name": name,
+                                "file_type": f.content_type or "application/pdf", "file_size": len(data),
+                                "sha256": digest, "file_path": rel, "uploaded_at": app_db.now(), "status": "stored"})
+        _pool.submit(_send, document_id)
+        results.append({"file_name": name, "id": document_id})
     return results
 
 
-@app.get("/api/files")
-def list_files():
-    return app_db.all_files()
-
-
-@app.get("/api/files/{file_id}")
-def file_detail(file_id: str):
+@app.get("/api/documents/{document_id}")
+def document_detail(document_id: str):
     """The app's row, plus the live Berry record read through the SDK on every call."""
-    row = _file_or_404(file_id)
-    out = {"file": row, "profile": None, "entities": [], "entity_groups": [], "text": "", "ner_run": None,
-           "berry_meta": None, "record": None, "berry_error": None}
-    if not row["berry_record_id"]:
+    doc = _document_or_404(document_id)
+    out = {"file": doc, "student": app_db.get_student(doc["student_id"]), "shared_with": [], "record_owner": None,
+           "profile": None, "entities": [], "entity_groups": [], "text": "", "ner_run": None, "berry_meta": None,
+           "record": None, "berry_error": None}
+    if not doc["berry_record_id"]:
         return out
+    out["shared_with"] = app_db.sharing(doc["berry_record_id"], document_id)
     try:
-        record = berry_client.get_record(row["berry_record_id"])
+        record = berry_client.get_record(doc["berry_record_id"])
     except Exception as e:
-        out["berry_error"] = f"Could not read the record from Berry: {str(e)[:300]}"
+        out["berry_error"] = f"Could not read the record from BerryDB: {str(e)[:300]}"
         return out
     if not record:
-        out["berry_error"] = "Berry has not made this record readable yet; try again in a few seconds."
+        out["berry_error"] = "BerryDB has not made this record readable yet; try again in a few seconds."
         return out
 
     ents = berry_client.entities(record)
-    updates = {}
-    if not row["candidate_name"] and record.get("fullName"):
-        _copy_display_fields(file_id, record)
-    if ents and (row["ner_status"] != "done" or row["entity_count"] != len(ents)):
-        updates.update(ner_status="done", entity_count=len(ents), ner_error=None)
-    elif not ents and row["ner_status"] == "done":  # re-ingesting replaces the record, annotations included
-        updates.update(ner_status=None, entity_count=None)
-    if updates:
-        app_db.update(file_id, **updates)
-        row = app_db.get(file_id)
+    if ents and (doc["ner_status"] != "done" or doc["entity_count"] != len(ents)):
+        app_db.update_document(document_id, ner_status="done", entity_count=len(ents), ner_error=None)
+    elif not ents and doc["ner_status"] == "done":  # re-ingesting replaces the record, annotations included
+        app_db.update_document(document_id, ner_status=None, entity_count=None)
+    doc = app_db.get_document(document_id)
 
     groups = {}
     for e in ents:
@@ -132,8 +230,10 @@ def file_detail(file_id: str):
         if e["text"] not in g:
             g.append(e["text"])
     meta = record.get("_meta") or {}
+    owner = record.get("studentId")
     out.update(
-        file=row,
+        file=doc,
+        record_owner=None if owner == doc["student_id"] else app_db.get_student(owner) if owner else None,
         profile={k: record.get(k) for k in PROFILE_FIELDS},
         entities=ents,
         entity_groups=[{"label": k, "values": v} for k, v in groups.items()],
@@ -141,62 +241,63 @@ def file_detail(file_id: str):
         ner_run=berry_client.ner_run_info(record),
         berry_meta={"id": record.get("id"), "database": meta.get("databaseName"),
                     "databaseId": meta.get("databaseId"), "organization": meta.get("organizationName"),
-                    "uploadedTime": meta.get("uploadedTime"), "appFileId": record.get("appFileId")},
+                    "uploadedTime": meta.get("uploadedTime"), "studentId": owner,
+                    "documentId": record.get("documentId")},
         record=record,
     )
     return out
 
 
-@app.get("/api/files/{file_id}/download")
-def download(file_id: str):
-    row = _file_or_404(file_id)
-    path = config.ROOT / row["file_path"]
+@app.get("/api/documents/{document_id}/download")
+def download(document_id: str):
+    doc = _document_or_404(document_id)
+    path = config.ROOT / doc["file_path"]
     if not path.is_file():
         raise HTTPException(410, "The stored file is missing")
-    return FileResponse(path, filename=row["file_name"], media_type="application/pdf",
-                        content_disposition_type="inline")
+    return FileResponse(path, filename=doc["file_name"], media_type="application/pdf", content_disposition_type="inline")
 
 
-@app.post("/api/files/{file_id}/send")
-def resend(file_id: str):
-    row = _file_or_404(file_id)
-    if row["status"] == "sending":
+@app.post("/api/documents/{document_id}/send")
+def resend(document_id: str):
+    doc = _document_or_404(document_id)
+    if doc["status"] == "sending":
         raise HTTPException(409, "Already being sent")
-    _pool.submit(_send, file_id)
+    _pool.submit(_send, document_id)
     return {"ok": True}
 
 
-@app.post("/api/files/{file_id}/ner")
-def ner(file_id: str):
-    row = _file_or_404(file_id)
-    if not row["berry_record_id"]:
-        raise HTTPException(409, "Send the file to Berry first")
+@app.post("/api/documents/{document_id}/ner")
+def ner(document_id: str):
+    doc = _document_or_404(document_id)
+    if not doc["berry_record_id"]:
+        raise HTTPException(409, "Send the document to BerryDB first")
     try:
-        job = berry_client.run_ner(row["berry_record_id"])
+        job = berry_client.run_ner(doc["berry_record_id"])
     except Exception as e:
-        app_db.update(file_id, ner_status="failed", ner_error=str(e)[:1000], ner_requested_at=app_db.now())
+        app_db.update_document(document_id, ner_status="failed", ner_error=str(e)[:1000], ner_requested_at=app_db.now())
         raise HTTPException(502, f"NER failed: {e}")
-    app_db.update(file_id, ner_status="requested", ner_error=None, ner_requested_at=app_db.now())
+    app_db.update_document(document_id, ner_status="requested", ner_error=None, ner_requested_at=app_db.now())
     return {"ok": True, "job": job}
 
 
-@app.delete("/api/files/{file_id}")
-def delete(file_id: str):
-    row = _file_or_404(file_id)
-    if row["berry_record_id"]:
-        try:
-            berry_client.delete_record(row["berry_record_id"])
-        except Exception as e:
-            raise HTTPException(502, f"Could not delete the Berry record, nothing was removed: {e}")
-    shutil.rmtree(config.STORAGE / file_id, ignore_errors=True)
-    app_db.delete(file_id)
+@app.delete("/api/documents/{document_id}")
+def delete_document(document_id: str):
+    doc = _document_or_404(document_id)
+    try:
+        _delete_berry_record_if_unused(doc)
+    except Exception as e:
+        raise HTTPException(502, f"Could not delete the BerryDB record, nothing was removed: {e}")
+    shutil.rmtree((config.ROOT / doc["file_path"]).parent, ignore_errors=True)
+    app_db.delete_document(document_id)
+    sync_profile(doc["student_id"])  # the profile no longer includes this document
     return {"ok": True}
 
 
 @app.get("/api/health")
 def health():
     return {"berry_host": config.BERRYDB_HOST, "berry_database": config.BERRY_DATABASE,
-            "berry_schema": config.BERRY_SCHEMA, "berry_reachable": berry_client.reachable()}
+            "berry_profile_database": config.BERRY_PROFILE_DATABASE, "berry_schema": config.BERRY_SCHEMA,
+            "berry_reachable": berry_client.reachable()}
 
 
 app.mount("/", StaticFiles(directory=config.FRONTEND, html=True), name="frontend")

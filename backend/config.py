@@ -25,6 +25,9 @@ BERRYDB_HOST = os.environ.get("BERRYDB_HOST", "https://api.berrydb.io").rstrip("
 BERRYDB_API_KEY = os.environ.get("BERRYDB_API_KEY", "")
 BERRY_DATABASE = os.environ.get("BERRY_DATABASE", "ResumePlaygroundKG")
 BERRY_SCHEMA = os.environ.get("BERRY_SCHEMA", "ResumeSchema")
+# one merged record per student, id = the student's UUID
+BERRY_PROFILE_DATABASE = os.environ.get("BERRY_PROFILE_DATABASE", "StudentProfiles")
+BERRY_PROFILE_SCHEMA = os.environ.get("BERRY_PROFILE_SCHEMA", "StudentProfileSchema")
 
 STORAGE = Path(os.environ.get("APP_STORAGE", ROOT / "storage"))
 SQLITE_PATH = Path(os.environ.get("APP_SQLITE", ROOT / "data" / "app.db"))
