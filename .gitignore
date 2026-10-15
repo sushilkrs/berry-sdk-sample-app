@@ -1,0 +1,27 @@
+# secrets
+.env
+
+# runtime data: uploaded files and the app's SQLite database
+storage/
+data/
+*.db
+*.sqlite3
+
+# Python build and cache files
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+
+# logs
+*.log
+
+# editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

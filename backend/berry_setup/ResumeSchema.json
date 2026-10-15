@@ -1,0 +1,68 @@
+{
+  "schemaName": "ResumeSchema",
+  "rawSchema": {
+    "academicRecordUrl": "",
+    "academicUnits": [],
+    "degreeName": "",
+    "documentUrl": "",
+    "email": "",
+    "fullName": "",
+    "githubUrl": "",
+    "graduationYear": 0,
+    "institutionName": "",
+    "jobTitle": "",
+    "linkedInUrl": "",
+    "location": "",
+    "portfolioUrl": "",
+    "professionalSummary": "",
+    "profilePic": "",
+    "projectPresentationUrl": "",
+    "skillsList": [],
+    "workExperience": [
+      {
+        "company": "",
+        "details": ""
+      }
+    ],
+    "content": {
+      "text": ""
+    }
+  },
+  "schemaDataTypes": {
+    "academicRecordUrl": "string",
+    "academicUnits": "array",
+    "academicUnits[0]": "string",
+    "degreeName": "string",
+    "documentUrl": "string",
+    "email": "string",
+    "fullName": "string",
+    "githubUrl": "string",
+    "graduationYear": "number",
+    "institutionName": "string",
+    "jobTitle": "string",
+    "linkedInUrl": "string",
+    "location": "string",
+    "portfolioUrl": "string",
+    "professionalSummary": "string",
+    "profilePic": "string",
+    "projectPresentationUrl": "string",
+    "skillsList": "array",
+    "workExperience": "array",
+    "workExperience[0].company": "string",
+    "workExperience[0].details": "string",
+    "content": "object",
+    "content.text": "string"
+  },
+  "filterFields": [
+    "jobTitle",
+    "graduationYear",
+    "location",
+    "institutionName"
+  ],
+  "indexFields": [
+    "professionalSummary"
+  ],
+  "displayTextField": "fullName",
+  "displayImageField": "profilePic",
+  "description": "Schema for ResumeSchema"
+}
