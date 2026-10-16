@@ -1,5 +1,7 @@
 # BerryDB SDK sample app
 
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/sushilkrs/berry-sdk-sample-app/blob/main/notebooks/walkthrough.ipynb)
+
 A small student-document app that shows how to integrate with **hosted BerryDB** from your own backend
 using the [BerryDB Python SDK](https://pypi.org/project/BerryDbNew/) (`BerryDbNew`).
 
@@ -24,6 +26,13 @@ The UI labels every piece of information with where it comes from: the app's dat
 documents database or the BerryDB profiles database.
 
 Only a BerryDB API key is needed. BerryDB runs the AI for extraction and entity recognition.
+
+## Try it in Colab
+
+[`notebooks/walkthrough.ipynb`](notebooks/walkthrough.ipynb) runs the same flow step by step with nothing to
+install: it creates the databases, registers two students, extracts sample resumes, builds and upserts their
+profiles, runs NER, and shows two students uploading the same file. Its last (optional) cell starts the full
+web app inside Colab. Open it with the badge above; you only need a BerryDB API key.
 
 ## Identity
 
@@ -83,6 +92,7 @@ berry-sdk-sample-app/
 │       ├── StudentProfileSchema.json schema of the profiles database
 │       └── create_schema_and_database.py
 ├── frontend/                        static UI: index.html, css/, js/ (students, student, document views)
+├── notebooks/walkthrough.ipynb      the same flow as a Colab notebook
 ├── storage/                         uploaded files (created at runtime, not committed)
 ├── data/app.db                      app database (created at runtime, not committed)
 └── .env.example
