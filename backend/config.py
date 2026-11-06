@@ -33,7 +33,7 @@ BERRY_PROFILE_SCHEMA = os.environ.get("BERRY_PROFILE_SCHEMA", "StudentProfileSch
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "openai").lower()   # openai | anthropic | openrouter
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
 # Berry GPT's own Anthropic default is not a valid model name, so always send one
-LLM_MODEL = os.environ.get("LLM_MODEL") or {"anthropic": "claude-sonnet-5-5", "openrouter": "openrouter/free"}.get(LLM_PROVIDER, "gpt-4o-mini")
+LLM_MODEL = os.environ.get("LLM_MODEL") or {"anthropic": "claude-sonnet-5-5", "openrouter": "nvidia/nemotron-3-ultra-550b-a55b:free"}.get(LLM_PROVIDER, "gpt-4o-mini")
 
 STORAGE = Path(os.environ.get("APP_STORAGE", ROOT / "storage"))
 SQLITE_PATH = Path(os.environ.get("APP_SQLITE", ROOT / "data" / "app.db"))

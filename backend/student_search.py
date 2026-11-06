@@ -33,14 +33,19 @@ Field types:
 {types}
 
 Rules:
-- Write FROM `{bucket}` AS p, and always select META(p).id AS id and p.fullName, plus the fields the
+- Write FROM `{bucket}` AS p, and select META(p).id AS id and p.fullName, plus the fields the
   question is about.
 - Skills are ONLY in p.skillsList (an array of strings). Match a skill case-insensitively and exactly:
   ANY s IN p.skillsList SATISFIES LOWER(s) = "java" END
   Do not use LIKE for skills ("java" must not match "javascript").
 - Combine conditions with AND / OR as the question says.
 - Arrays of objects: ANY w IN p.workExperience SATISFIES ... END
-- An IN list needs brackets: IN ["a", "b"]. Backtick the reserved words `value`, `start` and `end`.
+- An IN list is an array, so it takes square brackets, never parentheses:
+  right: LOWER(s) IN ["python", "go"]      wrong: LOWER(s) IN ("python", "go")
+- "How many" questions: select only the count, with no other fields and no GROUP BY:
+  SELECT COUNT(*) AS total FROM `{bucket}` AS p WHERE ...
+  (an exception to the id and fullName rule above)
+- Backtick the reserved words `value`, `start` and `end`.
 - No LIMIT unless the question asks for a number of students.
 - Read only: one SELECT, no subqueries, no UNION.
 - If the question cannot be answered from these fields, reply with: CANNOT: <short reason>
