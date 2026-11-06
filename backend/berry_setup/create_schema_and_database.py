@@ -25,25 +25,9 @@ def schema_exists(schema_name: str) -> bool:
 
 
 def create_schema(schema_name: str, schema: dict) -> None:
-    """The SDK's create_schema first; if the server rejects its body, the flat body it accepts."""
-    if BerryDB.create_schema(key, schema_name, schema["description"], schema):
-        print(f"[+] schema {schema_name}: created with the SDK")
-        return
-    body = {
-        "name": schema_name,
-        "description": schema["description"],
-        "rawSchema": schema["rawSchema"],
-        "dataTypes": schema["schemaDataTypes"],
-        "filterFields": schema["filterFields"],
-        "indexFields": schema["indexFields"],
-        "displayTextField": schema["displayTextField"],
-        "displayImageField": schema["displayImageField"],
-        "embeddedType": False,
-    }
-    r = requests.post(f"{host}/profile/schema", params={"apiKey": key}, json=body, timeout=60)
-    if r.status_code not in (200, 201):
-        raise SystemExit(f"[!] schema {schema_name} failed: HTTP {r.status_code} {r.text[:300]}")
-    print(f"[+] schema {schema_name}: created with the API fallback (the SDK call was rejected)")
+    """SDK 1.7.8+ sends the body the server accepts and raises on failure (1.7.7 always failed)."""
+    BerryDB.create_schema(key, schema_name, schema["description"], schema)
+    print(f"[+] schema {schema_name}: created")
 
 
 BerryDB.init(host)

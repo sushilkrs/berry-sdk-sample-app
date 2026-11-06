@@ -29,6 +29,12 @@ BERRY_SCHEMA = os.environ.get("BERRY_SCHEMA", "ResumeSchema")
 BERRY_PROFILE_DATABASE = os.environ.get("BERRY_PROFILE_DATABASE", "StudentProfiles")
 BERRY_PROFILE_SCHEMA = os.environ.get("BERRY_PROFILE_SCHEMA", "StudentProfileSchema")
 
+# Natural-language search: our own LLM key, sent through Berry GPT (SDK LLMAgent) to write the query
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "openai").lower()   # openai | anthropic | openrouter
+LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
+# Berry GPT's own Anthropic default is not a valid model name, so always send one
+LLM_MODEL = os.environ.get("LLM_MODEL") or {"anthropic": "claude-sonnet-5-5", "openrouter": "openrouter/free"}.get(LLM_PROVIDER, "gpt-4o-mini")
+
 STORAGE = Path(os.environ.get("APP_STORAGE", ROOT / "storage"))
 SQLITE_PATH = Path(os.environ.get("APP_SQLITE", ROOT / "data" / "app.db"))
 PORT = int(os.environ.get("APP_PORT", "8800"))

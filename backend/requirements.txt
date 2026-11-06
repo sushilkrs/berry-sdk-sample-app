@@ -1,4 +1,4 @@
-BerryDbNew==1.7.7
+BerryDbNew==1.7.9
 fastapi==0.142.2
 uvicorn==0.54.0
 python-multipart==0.0.32

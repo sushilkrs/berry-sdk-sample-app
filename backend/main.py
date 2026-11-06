@@ -13,7 +13,7 @@ from fastapi import Body, FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import app_db, berry_client, config, profile_merge
+from . import app_db, berry_client, config, profile_merge, student_search
 
 app = FastAPI(title="BerryDB SDK sample app")
 _pool = ThreadPoolExecutor(max_workers=3)
@@ -293,11 +293,35 @@ def delete_document(document_id: str):
     return {"ok": True}
 
 
+# ---------- natural-language search ----------
+
+@app.post("/api/search")
+def search(body: dict = Body(...)):
+    """Question -> Berry GPT writes a query -> db.query() on StudentProfiles -> matching students."""
+    question = " ".join(str(body.get("question") or "").split())
+    if not question:
+        raise HTTPException(400, "Type a question")
+    if len(question) > 500:
+        raise HTTPException(400, "Keep the question under 500 characters")
+    try:
+        out = student_search.search(question)
+    except student_search.SearchError as e:
+        return {"question": question, **e.partial, "error": str(e), "students": []}
+    students = []
+    for row in out.pop("rows"):
+        sid = row.get("id")
+        app_row = app_db.get_student(sid) if sid else None
+        students.append({"id": sid, "full_name": row.get("fullName") or (app_row or {}).get("full_name"),
+                         "in_app": bool(app_row), "fields": {k: v for k, v in row.items() if k not in ("id", "fullName")}})
+    return {**out, "students": students}
+
+
 @app.get("/api/health")
 def health():
     return {"berry_host": config.BERRYDB_HOST, "berry_database": config.BERRY_DATABASE,
             "berry_profile_database": config.BERRY_PROFILE_DATABASE, "berry_schema": config.BERRY_SCHEMA,
-            "berry_reachable": berry_client.reachable()}
+            "berry_reachable": berry_client.reachable(),
+            "search_ready": bool(config.LLM_API_KEY), "llm_provider": config.LLM_PROVIDER, "llm_model": config.LLM_MODEL}
 
 
 app.mount("/", StaticFiles(directory=config.FRONTEND, html=True), name="frontend")

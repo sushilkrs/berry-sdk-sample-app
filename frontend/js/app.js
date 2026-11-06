@@ -1,5 +1,6 @@
-// Router: #/ = students, #/students/<id> = profile, #/students/<id>/documents[/<documentId>] = documents.
+// Router: #/ = students, #/search = search, #/students/<id> = profile, #/students/<id>/documents[/<documentId>] = documents.
 import { $, api } from "./common.js";
+import { searchView } from "./search.js";
 import { studentView } from "./student.js";
 import { studentsView } from "./students.js";
 
@@ -11,6 +12,7 @@ function parse() {
   if (parts[0] === "students" && parts[1]) {
     return { view: "student", id: parts[1], tab: parts[2] === "documents" ? "documents" : "profile", docId: parts[3] || null };
   }
+  if (parts[0] === "search") return { view: "search" };
   return { view: "students" };
 }
 
@@ -18,7 +20,8 @@ function route() {
   const p = parse();
   if (p.view === "student" && current?.key === p.id) return current.route(p);  // same student: keep state
   current?.destroy();
-  current = p.view === "student" ? studentView(root, p) : studentsView(root);
+  current = p.view === "student" ? studentView(root, p) : p.view === "search" ? searchView(root) : studentsView(root);
+  document.querySelectorAll(".nav a").forEach((a) => a.classList.toggle("on", a.dataset.view === (p.view === "search" ? "search" : "students")));
   window.scrollTo(0, 0);
 }
 
