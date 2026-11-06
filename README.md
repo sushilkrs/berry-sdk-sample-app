@@ -48,14 +48,34 @@ A student is never identified from a document's name, size, content or the name 
 
 | Step | Call |
 |---|---|
-| Send a PDF for extraction | `POST /berrydb/ingest/structured`, multipart form with `database_name`, `file` and `metadata` (JSON). SDK 1.7.7's `Database.ingest_structured` accepts URLs only, so the app calls the endpoint directly to send the file itself. |
+| Send a PDF for extraction | `POST /berrydb/ingest/structured`, multipart form with `database_name`, `file` and `metadata` (JSON). SDK 1.7.9's `Database.ingest_structured` accepts URLs only, so the app calls the endpoint directly to send the file itself. |
 | Read document records | SDK: `db.get_all_documents(document_ids=[...])` |
 | Create or update a student profile | SDK: `db.upsert([profile])` with `id` = student UUID (replaces the whole record, so the app always sends it complete) |
 | Entity recognition | SDK: `db.ner("content.text", document_ids=[id], annotate=True)` |
 | Delete a record | SDK: `db.delete_document(id)` |
+| Search students in plain English | SDK: `LLMAgent.chat(llm_api_key, {"question": ...})` writes a query, then `db.query(sql)` runs it (see below) |
 
 All BerryDB calls live in [`backend/berry_client.py`](backend/berry_client.py); the merge rules in
 [`backend/profile_merge.py`](backend/profile_merge.py).
+
+## Searching students
+
+The Search page takes a plain-English question, for example "students who know Java and MySQL", and lists
+every matching student. It searches the merged profiles only, and skills only in `skillsList`.
+
+1. **Berry GPT writes the query.** `LLMAgent.chat()` sends the question to Berry GPT with the app's own LLM
+   key (`LLM_PROVIDER`, `LLM_API_KEY` in `.env`). Berry GPT only passes the prompt to the LLM; it does not
+   see the database, so the system prompt carries the `StudentProfileSchema` and the query rules. The
+   question goes in through the `{{question}}` placeholder.
+2. **The app checks it.** One SELECT, no subqueries, and a WHERE of the form
+   `p.databaseName = "StudentProfiles" AND (...)`: all databases share the `BerryDb` bucket, so without that
+   scope a query would read every database the API key can see.
+3. **`db.query()` runs it** and returns every matching document, not only the most similar few. It returns
+   an empty string on failure, so the app keeps the reason it prints and shows it.
+
+The page shows the query that was run and the model's reply. Berry GPT treats temperature 0 as unset, so
+the app sends 0.01; and its default Anthropic model name is not a valid one, so the app always sends a model.
+The code is in [`backend/student_search.py`](backend/student_search.py).
 
 ## Merge rules for the student profile
 
@@ -84,6 +104,7 @@ berry-sdk-sample-app/
 │   ├── main.py                      HTTP endpoints for students and documents
 │   ├── berry_client.py              every BerryDB call
 │   ├── profile_merge.py             builds a student's merged profile
+│   ├── student_search.py            plain-English search: Berry GPT writes the query, db.query() runs it
 │   ├── app_db.py                    the app's own SQLite database (students, documents)
 │   ├── config.py                    settings from .env
 │   ├── requirements.txt
@@ -91,7 +112,7 @@ berry-sdk-sample-app/
 │       ├── ResumeSchema.json        schema of the documents database
 │       ├── StudentProfileSchema.json schema of the profiles database
 │       └── create_schema_and_database.py
-├── frontend/                        static UI: index.html, css/, js/ (students, student, document views)
+├── frontend/                        static UI: index.html, css/, js/ (students, student, document, search views)
 ├── notebooks/walkthrough.ipynb      the same flow as a Colab notebook
 ├── storage/                         uploaded files (created at runtime, not committed)
 ├── data/app.db                      app database (created at runtime, not committed)
@@ -106,7 +127,7 @@ Requirements: Python 3.11 or later and a BerryDB API key (from your account sett
 ```bash
 python -m venv .venv
 .venv/Scripts/python -m pip install -r backend/requirements.txt     # macOS/Linux: .venv/bin/python
-cp .env.example .env                                                # then put your API key in .env
+cp .env.example .env                                                # then put your API key (and an LLM key, for search) in .env
 .venv/Scripts/python -m backend.berry_setup.create_schema_and_database   # once per BerryDB organization
 .venv/Scripts/python -m backend                                     # open http://127.0.0.1:8800
 ```
