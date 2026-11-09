@@ -6,7 +6,7 @@ Two Berry databases:
   profiles  (config.BERRY_PROFILE_DATABASE)  one merged record per student, written by this app with
                                              upsert; the record id is the student's UUID
 
-The SDK is used for everything except sending the file: SDK 1.7.9's Database.ingest_structured
+The SDK is used for everything except sending the file: SDK 1.7.10's Database.ingest_structured
 takes only URLs, while the same endpoint also accepts the file itself as a multipart upload.
 """
 import json
