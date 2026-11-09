@@ -54,6 +54,7 @@ A student is never identified from a document's name, size, content or the name 
 | Entity recognition | SDK: `db.ner("content.text", document_ids=[id], annotate=True)` |
 | Delete a record | SDK: `db.delete_document(id)` |
 | Search students in plain English | SDK: `LLMAgent.chat(llm_api_key, {"question": ...})` writes a query, then `db.query(sql)` runs it (see below) |
+| Knowledge graph of a student | `GET <BERRYDB_HOST>/universal-api/graph/enrich?database=...` (BerryDB's graph of the documents' entities), joined with the profile; falls back to each document's NER annotation |
 
 All BerryDB calls live in [`backend/berry_client.py`](backend/berry_client.py); the merge rules in
 [`backend/profile_merge.py`](backend/profile_merge.py).
@@ -105,6 +106,7 @@ berry-sdk-sample-app/
 │   ├── berry_client.py              every BerryDB call
 │   ├── profile_merge.py             builds a student's merged profile
 │   ├── student_search.py            plain-English search: Berry GPT writes the query, db.query() runs it
+│   ├── graph.py                     a student's knowledge graph (profile, documents, entities)
 │   ├── app_db.py                    the app's own SQLite database (students, documents)
 │   ├── config.py                    settings from .env
 │   ├── requirements.txt
@@ -112,7 +114,8 @@ berry-sdk-sample-app/
 │       ├── ResumeSchema.json        schema of the documents database
 │       ├── StudentProfileSchema.json schema of the profiles database
 │       └── create_schema_and_database.py
-├── frontend/                        static UI: index.html, css/, js/ (students, student, document, search views)
+├── frontend/                        static UI: index.html, css/, js/ (students, student, document, search views,
+│                                    graph.js = the knowledge graph card), vendor/ (force-graph 1.51.4, MIT)
 ├── notebooks/walkthrough.ipynb      the same flow as a Colab notebook
 ├── storage/                         uploaded files (created at runtime, not committed)
 ├── data/app.db                      app database (created at runtime, not committed)
@@ -151,6 +154,19 @@ BerryDB's entity recognition only runs on fields the schema declares.
 
 To browse the app database, open `data/app.db` with any SQLite viewer, for example the
 SQLite Viewer extension for VS Code or DB Browser for SQLite.
+
+## Knowledge graph
+
+The student page ends with a **Knowledge graph** card: the student, their skills, job title, location,
+companies and education from the merged profile, their documents, and the people, organizations and
+places each document mentions. Entities that name the same thing as a profile value (the organization
+"Infosys" in a resume and the company "Infosys" in the profile) are one node. The data comes from
+`GET /api/students/<id>/graph` ([`backend/graph.py`](backend/graph.py)); the card is
+[`frontend/js/graph.js`](frontend/js/graph.js), drawn with the vendored
+[force-graph](https://github.com/vasturiano/force-graph) library.
+
+Entities come from BerryDB's graph service when it has projected the document, otherwise from the
+document's own NER annotation, so run entity recognition on a document to see its entities.
 
 ## Limitations
 

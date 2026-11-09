@@ -13,7 +13,7 @@ from fastapi import Body, FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import app_db, berry_client, config, profile_merge, student_search
+from . import app_db, berry_client, config, graph, profile_merge, student_search
 
 app = FastAPI(title="BerryDB SDK sample app")
 _pool = ThreadPoolExecutor(max_workers=3)
@@ -322,6 +322,12 @@ def health():
             "berry_profile_database": config.BERRY_PROFILE_DATABASE, "berry_schema": config.BERRY_SCHEMA,
             "berry_reachable": berry_client.reachable(),
             "search_ready": bool(config.LLM_API_KEY), "llm_provider": config.LLM_PROVIDER, "llm_model": config.LLM_MODEL}
+
+
+@app.get("/api/students/{student_id}/graph")
+def student_graph(student_id: str):
+    """The student's knowledge graph: profile values, documents and the entities they mention."""
+    return graph.student_graph(student_id)
 
 
 app.mount("/", StaticFiles(directory=config.FRONTEND, html=True), name="frontend")
