@@ -279,7 +279,7 @@ pre.json { margin: 0; max-height: 520px; overflow: auto; font-size: 12px; backgr
 
 /* search page */
 .search-bar { display: flex; gap: 8px; }
-.search-bar .search { max-width: none; flex: 1; }
+.search-bar .search { max-width: none; flex: 1; margin-bottom: 0; }  /* else the stretched button grows by the margin */
 .search-examples { margin: 10px 0 18px; }
 .search-examples .chip { cursor: pointer; color: inherit; }
 .search-examples .chip:hover { border-color: var(--accent); color: var(--accent); }
