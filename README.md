@@ -48,7 +48,7 @@ A student is never identified from a document's name, size, content or the name 
 
 | Step | Call |
 |---|---|
-| Send a PDF for extraction | `POST /berrydb/ingest/structured`, multipart form with `database_name`, `file` and `metadata` (JSON). SDK 1.7.9's `Database.ingest_structured` accepts URLs only, so the app calls the endpoint directly to send the file itself. |
+| Send a PDF for extraction | `POST /berrydb/ingest/structured`, multipart form with `database_name`, `file` and `metadata` (JSON). SDK 1.7.10's `Database.ingest_structured` accepts URLs only, so the app calls the endpoint directly to send the file itself. |
 | Read document records | SDK: `db.get_all_documents(document_ids=[...])` |
 | Create or update a student profile | SDK: `db.upsert([profile])` with `id` = student UUID (replaces the whole record, so the app always sends it complete) |
 | Entity recognition | SDK: `db.ner("content.text", document_ids=[id], annotate=True)` |

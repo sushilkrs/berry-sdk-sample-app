@@ -172,7 +172,7 @@ function lineageTab(d) {
         <dt>documentId on record</dt><dd class="mono">${esc(m.documentId || "—")}</dd></dl>` : `<p class="muted">${esc(d.berry_error || "Not in BerryDB yet.")}</p>`}
       <div class="how">
         <b>Written by</b> <span class="mono">POST /berrydb/ingest/structured</span> with the PDF and <span class="mono">metadata = {studentId, documentId}</span>
-        (direct API call; SDK 1.7.7 only sends URLs). The record id is derived by BerryDB from the file bytes.<br>
+        (direct API call; SDK 1.7.10 only sends URLs). The record id is derived by BerryDB from the file bytes.<br>
         <b>Read by</b> the SDK, <span class="mono">db.get_all_documents(document_ids=[id])</span>, every time this page opens.<br>
         <b>Entities by</b> the SDK, <span class="mono">db.ner("content.text", [id], annotate=True)</span>; BerryDB saves them on the same record.
       </div>
