@@ -62,7 +62,7 @@ class SearchError(RuntimeError):
 
 
 def _system_prompt() -> str:
-    schema = json.loads((config.BERRY_SETUP / f"{config.BERRY_PROFILE_SCHEMA}.json").read_text())
+    schema = json.loads(config.SCHEMA_FILES[config.BERRY_PROFILE_SCHEMA].read_text())
     return PROMPT.format(bucket=BUCKET, database=config.BERRY_PROFILE_DATABASE,
                          shape=json.dumps(schema["rawSchema"], indent=1),
                          types=json.dumps(schema["schemaDataTypes"], indent=1))

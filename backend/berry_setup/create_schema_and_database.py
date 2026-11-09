@@ -35,7 +35,7 @@ for schema_name, db_name in PAIRS:
     if schema_exists(schema_name):
         print(f"[=] schema {schema_name} exists")
     else:
-        create_schema(schema_name, json.loads((config.BERRY_SETUP / f"{schema_name}.json").read_text()))
+        create_schema(schema_name, json.loads(config.SCHEMA_FILES[schema_name].read_text()))
 
     existing = BerryDB.databases(key) or {}
     if db_name in existing:

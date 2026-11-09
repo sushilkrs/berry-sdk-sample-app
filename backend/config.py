@@ -28,6 +28,10 @@ BERRY_SCHEMA = os.environ.get("BERRY_SCHEMA", "ResumeSchema")
 # one merged record per student, id = the student's UUID
 BERRY_PROFILE_DATABASE = os.environ.get("BERRY_PROFILE_DATABASE", "StudentProfiles")
 BERRY_PROFILE_SCHEMA = os.environ.get("BERRY_PROFILE_SCHEMA", "StudentProfileSchema")
+# The schema definitions shipped with the app. The names above can be changed (a deployment may register
+# them under its own names); the shapes always come from these files.
+SCHEMA_FILES = {BERRY_SCHEMA: BERRY_SETUP / "ResumeSchema.json",
+                BERRY_PROFILE_SCHEMA: BERRY_SETUP / "StudentProfileSchema.json"}
 
 # Natural-language search: our own LLM key, sent through Berry GPT (SDK LLMAgent) to write the query
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "openai").lower()   # openai | anthropic | openrouter
