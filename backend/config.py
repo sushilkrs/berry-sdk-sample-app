@@ -28,6 +28,11 @@ BERRY_SCHEMA = os.environ.get("BERRY_SCHEMA", "ResumeSchema")
 # one merged record per student, id = the student's UUID
 BERRY_PROFILE_DATABASE = os.environ.get("BERRY_PROFILE_DATABASE", "StudentProfiles")
 BERRY_PROFILE_SCHEMA = os.environ.get("BERRY_PROFILE_SCHEMA", "StudentProfileSchema")
+# Knowledge graph: BerryDB's graph projection of the documents (universal-graph-service). When it is not
+# reachable, or has not projected a document yet, the graph uses the document's NER annotation instead.
+BERRY_GRAPH_API = os.environ.get("BERRY_GRAPH_API", BERRYDB_HOST + "/universal-api").rstrip("/")
+BERRY_ORG_NAME = os.environ.get("BERRY_ORG_NAME", "")   # org of BERRYDB_API_KEY; sent as x-org-name
+
 # The schema definitions shipped with the app. The names above can be changed (a deployment may register
 # them under its own names); the shapes always come from these files.
 SCHEMA_FILES = {BERRY_SCHEMA: BERRY_SETUP / "ResumeSchema.json",
